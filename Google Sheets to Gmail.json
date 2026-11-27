@@ -1,0 +1,343 @@
+{
+  "name": "Google Sheets to Gmail",
+  "nodes": [
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1WHLcyx3aaEvBGfjXxCbbUat6nf8lT5y1iJUjjwVh_pw",
+          "mode": "list",
+          "cachedResultName": "n8n-test",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1WHLcyx3aaEvBGfjXxCbbUat6nf8lT5y1iJUjjwVh_pw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1WHLcyx3aaEvBGfjXxCbbUat6nf8lT5y1iJUjjwVh_pw/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -416,
+        -16
+      ],
+      "id": "1055df1a-7fbe-46a1-8e5f-38f2d34f12ae",
+      "name": "Get row(s) in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "k8LSHYGlI7urwbYR",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "dc300839-84e8-4cf0-a52d-9f058fae6499",
+              "leftValue": "={{ $json.hasData }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        16,
+        -16
+      ],
+      "id": "fbe9d8fe-c569-407f-95fa-0cee0e2fffb7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "vicke.4490@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        272,
+        -96
+      ],
+      "id": "cd548713-c913-499d-9d67-7bed3c768e25",
+      "name": "Send a message",
+      "webhookId": "a8d9dcfd-5010-4b9c-9569-51ebd6be889f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "hTTen5pB5y4KCryE",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        432,
+        80
+      ],
+      "id": "968c52d8-ae09-4600-9a3b-0b51b3efe5f4",
+      "name": "Empty Sheet - No Email"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -624,
+        -16
+      ],
+      "id": "b41cef46-1cd9-4b54-bc17-8a7697d9adfc",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $('Build Email').first().json.sentRows\n  .map(row => ({ json: row }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -96
+      ],
+      "id": "9012baa8-d70d-4809-8938-99db3a90fb60",
+      "name": "Prepare Update"
+    },
+    {
+      "parameters": {
+        "jsCode": "const clean = v => String(v ?? '').trim();\n\nconst changed = [];\n\nfor (const { json: r } of $input.all()) {\n  const name = clean(r.Name);\n  const course = clean(r.Course);\n  const status = clean(r.Status);\n\n  // Skip empty or half-filled rows\n  if (!name || !course || !status) continue;\n\n  const current = `${name} | ${course} | ${status}`;\n  const lastSent = clean(r['Last Sent']);\n\n  // Skip rows that haven't changed\n  if (current === lastSent) continue;\n\n  changed.push({\n    row_number: r.row_number,\n    type: lastSent ? 'Updated' : 'New',\n    name, course, status, current\n  });\n}\n\n// Nothing new: don't send an email\nif (changed.length === 0) {\n  return [{ json: { hasData: false } }];\n}\n\nconst details = changed.map((r, i) =>\n`${i + 1}. ${r.type} record\n- Name: ${r.name}\n- Course: ${r.course}\n- Status: ${r.status}`\n).join('\\n\\n');\n\nconst body = `Hi,\n\nHere is the latest data from the sheet:\n\n${details}\n\nTotal new or updated records: ${changed.length}\n\nRegards,\nYour Automation Bot`;\n\nreturn [{\n  json: {\n    hasData: true,\n    subject: 'Data Summary from Google Sheet',\n    body,\n    sentRows: changed.map(r => ({\n      row_number: r.row_number,\n      lastSent: r.current\n    }))\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -16
+      ],
+      "id": "e65cba63-a7fd-4874-8f47-af4d192db5fb",
+      "name": "Build Email"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1WHLcyx3aaEvBGfjXxCbbUat6nf8lT5y1iJUjjwVh_pw",
+          "mode": "list",
+          "cachedResultName": "n8n-test",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1WHLcyx3aaEvBGfjXxCbbUat6nf8lT5y1iJUjjwVh_pw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1WHLcyx3aaEvBGfjXxCbbUat6nf8lT5y1iJUjjwVh_pw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "Last Sent": "={{ $json.lastSent }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Course",
+              "displayName": "Course",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Last Sent",
+              "displayName": "Last Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        768,
+        -96
+      ],
+      "id": "81458860-7704-4fdb-ba01-72c4fde18e8a",
+      "name": "Update Sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "k8LSHYGlI7urwbYR",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Build Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Empty Sheet - No Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Update": {
+      "main": [
+        [
+          {
+            "node": "Update Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Prepare Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Email": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c2b13208-2010-408d-8366-d33850d7a276",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9e6a8aebf299d925d6bb047ada4cfc27d954b62cab5adfad8a93ece4a5c35e74"
+  },
+  "nodeGroups": [],
+  "id": "hExKU34LR9V8gyV3",
+  "tags": []
+}
